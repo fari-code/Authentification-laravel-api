@@ -1,3 +1,4 @@
+
 ## RESTful Authentication API — Laravel Sanctum
 
 Une API REST robuste, sécurisée et extensible d'authentification et d'autorisation, développée avec Laravel 11, Laravel Sanctum et Spatie Laravel-Permission.
@@ -192,3 +193,4 @@ En cas d'erreur lors des saisies dans les formulaires, l'API retourne un code de
  Licence
 
 Ce projet est sous licence MIT.
+
