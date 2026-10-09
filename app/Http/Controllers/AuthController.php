@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Notifications\ResetPasswordCodeNotification;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
@@ -72,4 +75,68 @@ class AuthController extends Controller
             'message' => 'Déconnexion réussie',
         ], 200);
     }
+
+    public function forgotPassword(Request $request)
+{
+    $request->validate([
+        'email' => 'required|email|exists:users,email',
+    ]);
+
+    // Génération d'un code à 6 chiffres
+    $code = random_int(100000, 999999);
+
+    // Suppression des anciens codes de cet email
+    DB::table('password_reset_codes')->where('email', $request->email)->delete();
+
+    // Enregistrement du nouveau code
+    DB::table('password_reset_codes')->insert([
+        'email' => $request->email,
+        'code' => $code,
+        'created_at' => Carbon::now(),
+    ]);
+
+    // Notification / Envoi d'email
+    $user = User::where('email', $request->email)->first();
+    $user->notify(new ResetPasswordCodeNotification($code));
+
+    return response()->json([
+        'message' => 'Le code de réinitialisation a été envoyé sur votre email.'
+    ], 200);
+}
+
+public function resetPassword(Request $request)
+{
+    $request->validate([
+        'email' => 'required|email|exists:users,email',
+        'code' => 'required|string',
+        'password' => 'required|string|min:8|confirmed',
+    ]);
+
+    $resetRecord = DB::table('password_reset_codes')
+        ->where('email', $request->email)
+        ->where('code', $request->code)
+        ->first();
+
+    // Vérifier si le code existe et n'a pas expiré (ex: 15 minutes)
+    if (!$resetRecord || Carbon::parse($resetRecord->created_at)->addMinutes(15)->isPast()) {
+        return response()->json([
+            'message' => 'Code invalide ou expiré.'
+        ], 400);
+    }
+
+    // Mise à jour du mot de passe
+    $user = User::where('email', $request->email)->first();
+    $user->password = Hash::make($request->password);
+    $user->save();
+
+    // Révocation de tous les anciens tokens de l'utilisateur (Sécurité)
+    $user->tokens()->delete();
+
+    // Suppression du code utilisé
+    DB::table('password_reset_codes')->where('email', $request->email)->delete();
+
+    return response()->json([
+        'message' => 'Mot de passe réinitialisé avec succès.'
+    ], 200);
+}
 }
